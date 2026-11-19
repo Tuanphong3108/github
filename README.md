@@ -14,6 +14,7 @@ Chạy được 2 nơi, cùng một lõi `src/app.js`:
 | Tool | Chức năng |
 |---|---|
 | `list_repos` | Liệt kê repository (của bạn, cộng tác, hoặc của 1 org) |
+| `create_repo` | Tạo repository mới (của bạn hoặc trong org). Mặc định **private** và có README để dùng được ngay |
 | `list_files` | Duyệt cây thư mục (1 cấp hoặc `recursive`) |
 | `read_file` | Đọc nội dung file (hỗ trợ `start_line`/`end_line`, file > 1MB, binary base64) |
 | `create_file` | Tạo file, commit thẳng lên branch (chạy được cả repo rỗng) |
@@ -103,7 +104,7 @@ Bấm **Tiếp theo** → đăng nhập GitHub → Authorize.
 npm test
 ```
 
-Dựng GitHub giả in-memory, chạy server thật, đi hết luồng OAuth (PKCE) và gọi đủ 10 tool. Muốn thử bản Worker trên runtime thật: chạy `wrangler dev` với các `--var` trỏ `GITHUB_API_URL`/`GITHUB_WEB_URL` về `http://127.0.0.1:<MOCK_PORT>`, rồi `SMOKE_BASE=http://127.0.0.1:<port> MOCK_PORT=<MOCK_PORT> node test/smoke.mjs`.
+Dựng GitHub giả in-memory, chạy server thật, đi hết luồng OAuth (PKCE) và gọi đủ 11 tool. Muốn thử bản Worker trên runtime thật: chạy `wrangler dev` với các `--var` trỏ `GITHUB_API_URL`/`GITHUB_WEB_URL` về `http://127.0.0.1:<MOCK_PORT>`, rồi `SMOKE_BASE=http://127.0.0.1:<port> MOCK_PORT=<MOCK_PORT> node test/smoke.mjs`.
 
 ## Bảo mật
 

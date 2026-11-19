@@ -39,7 +39,7 @@ export function configure(env) {
 }
 export const getConfig = () => cfg;
 
-const SERVER_INFO = { name: "github-remote-repository", title: "Github Remote Repository", version: "1.1.1" };
+const SERVER_INFO = { name: "github-remote-repository", title: "Github Remote Repository", version: "1.2.0" };
 const PROTOCOLS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 
 /* ------------------------------------------------------------------ sealing */
@@ -217,6 +217,35 @@ const TOOLS = [
       }));
     },
     { readOnlyHint: true },
+  ),
+
+  tool(
+    "create_repo",
+    "Create a new GitHub repository for the authenticated user, or inside an organization. Private by default and initialized with a README by default, so the repo is not empty and create_branch/commit_changes work right away.",
+    {
+      name: { type: "string", description: "Repository name, e.g. my-project" },
+      description: { type: "string", description: "Short description." },
+      private: { type: "boolean", description: "Create a private repository. Default true." },
+      org: { type: "string", description: "Create under this organization instead of the user's account." },
+      auto_init: { type: "boolean", description: "Create an initial commit with a README. Default true." },
+      gitignore_template: { type: "string", description: "Optional .gitignore template, e.g. Node, Python." },
+      license_template: { type: "string", description: "Optional license, e.g. mit, apache-2.0." },
+      homepage: { type: "string", description: "Optional homepage URL." },
+    },
+    ["name"],
+    async (a, t) => {
+      need(a, "name");
+      const r = await gh(t, "POST", a.org ? `/orgs/${encodeURIComponent(a.org)}/repos` : "/user/repos", {
+        name: a.name,
+        private: a.private !== false,
+        auto_init: a.auto_init !== false,
+        ...(a.description ? { description: a.description } : {}),
+        ...(a.homepage ? { homepage: a.homepage } : {}),
+        ...(a.gitignore_template ? { gitignore_template: a.gitignore_template } : {}),
+        ...(a.license_template ? { license_template: a.license_template } : {}),
+      });
+      return { full_name: r.full_name, private: r.private, default_branch: r.default_branch, html_url: r.html_url, clone_url: r.clone_url };
+    },
   ),
 
   tool(

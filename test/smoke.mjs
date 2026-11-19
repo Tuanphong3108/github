@@ -72,6 +72,7 @@ const mock = http.createServer(async (req, res) => {
   if (p === "/login/oauth/access_token") return json(200, body.code === "ghcode" ? { access_token: "gho_fake" } : { error: "bad_verification_code" });
   if (req.headers.authorization !== "Bearer gho_fake") return json(401, { message: "Bad credentials" });
 
+  if (p === "/user/repos" && req.method === "POST") return json(201, { full_name: `u/${body.name}`, private: body.private, default_branch: "main", html_url: "x", clone_url: "x" });
   if (p === "/user/repos") return json(200, [{ full_name: "u/r", private: false, default_branch: "main", description: null, pushed_at: "2026-01-01T00:00:00Z", permissions: { push: true }, html_url: "https://github.com/u/r" }]);
 
   const m = p.match(/^\/repos\/u\/r(\/.*)?$/);
@@ -261,11 +262,17 @@ try {
   const notif = await fetch(`${base}/mcp`, { method: "POST", headers: { Authorization: `Bearer ${tok.access_token}` }, body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) });
   assert.equal(notif.status, 202);
   const list = await rpc("tools/list");
-  assert.deepEqual(list.result.tools.map((t) => t.name).sort(), ["commit_changes", "create_branch", "create_file", "delete_file", "get_commit", "list_files", "list_repos", "push_changes", "read_file", "update_file"]);
-  ok("initialize + tools/list (10 tool)");
+  assert.deepEqual(list.result.tools.map((t) => t.name).sort(), ["commit_changes", "create_branch", "create_file", "create_repo", "delete_file", "get_commit", "list_files", "list_repos", "push_changes", "read_file", "update_file"]);
+  ok("initialize + tools/list (11 tool)");
 
   assert.equal(data(await call("list_repos", {}))[0].full_name, "u/r");
   ok("list_repos");
+
+  const nr = data(await call("create_repo", { name: "new-repo", description: "d" }));
+  assert.equal(nr.full_name, "u/new-repo");
+  assert.equal(nr.private, true, "mặc định phải là private");
+  assert.equal(data(await call("create_repo", { name: "pub", private: false })).private, false);
+  ok("create_repo (mặc định private)");
 
   assert.equal(data(await call("list_files", R))[0].name, "README.md");
   ok("list_files");

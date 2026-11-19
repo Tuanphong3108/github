@@ -1,4 +1,4 @@
-// Smoke test: dựng GitHub giả (in-memory) + chạy server.js thật, đi hết luồng OAuth và gọi cả 12 tool.
+// Smoke test: dựng GitHub giả (in-memory) + chạy server.js thật, đi hết luồng OAuth và gọi các tool core.
 // Chạy: npm test
 import http from "node:http";
 import crypto from "node:crypto";
@@ -296,8 +296,11 @@ try {
   const notif = await fetch(`${base}/mcp`, { method: "POST", headers: { Authorization: `Bearer ${tok.access_token}` }, body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) });
   assert.equal(notif.status, 202);
   const list = await rpc("tools/list");
-  assert.deepEqual(list.result.tools.map((t) => t.name).sort(), ["commit_changes", "create_branch", "create_file", "create_repo", "delete_file", "get_commit", "list_commits", "list_files", "list_repos", "push_changes", "read_file", "update_file"]);
-  ok("initialize + tools/list (12 tool)");
+  const names = list.result.tools.map((t) => t.name);
+  for (const n of ["commit_changes", "create_branch", "create_file", "create_repo", "delete_file", "get_commit", "list_commits", "list_files", "list_repos", "push_changes", "read_file", "update_file"]) assert.ok(names.includes(n), `thiếu tool ${n}`);
+  for (const n of ["create_issue", "merge_pull_request", "get_job_logs", "create_release", "create_webhook", "update_branch_protection"]) assert.ok(names.includes(n), `thiếu tool ${n}`);
+  assert.equal(new Set(names).size, names.length, "tên tool bị trùng");
+  ok(`initialize + tools/list (${names.length} tool, đủ các nhóm)`);
 
   assert.equal(data(await call("list_repos", {}))[0].full_name, "u/r");
   ok("list_repos");

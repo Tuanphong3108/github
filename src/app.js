@@ -39,7 +39,7 @@ export function configure(env) {
 }
 export const getConfig = () => cfg;
 
-const SERVER_INFO = { name: "github-mcp-server", version: "1.1.0" };
+const SERVER_INFO = { name: "github-remote-repository", title: "Github Remote Repository", version: "1.1.1" };
 const PROTOCOLS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 
 /* ------------------------------------------------------------------ sealing */

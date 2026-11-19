@@ -1,4 +1,4 @@
-# GitHub MCP Server cho Gemini Custom Connector
+# Github Remote Repository (GitHub MCP Server cho Gemini Custom Connector)
 
 MCP server (Streamable HTTP) kèm OAuth 2.0 để Gemini quản lý repo GitHub tự chủ: duyệt, đọc, tạo/sửa/xoá file, tạo branch, commit, push. Không có dependency ngoài.
 

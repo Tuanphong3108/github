@@ -6,6 +6,7 @@
  * State/auth code/access token đều là blob mã hoá AES-256-GCM, không cần DB.
  */
 import crypto from "node:crypto";
+import { ICON_SVG, ICON_PNG_B64, ICON_ICO_B64 } from "./icons.js";
 
 /* ------------------------------------------------------------------ config */
 let cfg = null;
@@ -39,8 +40,8 @@ export function configure(env) {
 }
 export const getConfig = () => cfg;
 
-const SERVER_INFO = { name: "github-remote-repository", title: "Github Remote Repository", version: "1.2.0" };
-const PROTOCOLS = ["2025-06-18", "2025-03-26", "2024-11-05"];
+const SERVER_INFO = { name: "github-remote-repository", title: "Github Remote Repository", version: "1.3.0" };
+const PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 
 /* ------------------------------------------------------------------ sealing */
 function seal(obj) {
@@ -597,7 +598,7 @@ async function callTool(name, args, token) {
 }
 
 /* --------------------------------------------------------------- MCP JSON-RPC */
-async function handleRpc(msg, token) {
+async function handleRpc(msg, token, base) {
   if (!msg || typeof msg !== "object" || msg.jsonrpc !== "2.0" || typeof msg.method !== "string") {
     return { jsonrpc: "2.0", id: msg?.id ?? null, error: { code: -32600, message: "Invalid Request" } };
   }
@@ -611,7 +612,13 @@ async function handleRpc(msg, token) {
       return ok({
         protocolVersion: PROTOCOLS.includes(want) ? want : PROTOCOLS[0],
         capabilities: { tools: { listChanged: false } },
-        serverInfo: SERVER_INFO,
+        serverInfo: {
+          ...SERVER_INFO,
+          icons: [
+            { src: `${base}/icon.png`, mimeType: "image/png", sizes: ["512x512"] },
+            { src: `${base}/favicon.svg`, mimeType: "image/svg+xml", sizes: ["any"] },
+          ],
+        },
         instructions:
           "GitHub repository tools. Direct edits: create_file/update_file/delete_file commit straight to a branch. For multi-file changes use commit_changes then push_changes. Verify with get_commit.",
       });
@@ -658,10 +665,10 @@ async function handleMcp(request) {
     return jres(400, { jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } });
   }
   if (Array.isArray(payload)) {
-    const out = (await Promise.all(payload.map((m) => handleRpc(m, token)))).filter(Boolean);
+    const out = (await Promise.all(payload.map((m) => handleRpc(m, token, base)))).filter(Boolean);
     return out.length ? jres(200, out) : plain(202);
   }
-  const out = await handleRpc(payload, token);
+  const out = await handleRpc(payload, token, base);
   return out ? jres(200, out) : plain(202);
 }
 
@@ -796,6 +803,23 @@ async function handleToken(request) {
   return jres(400, { error: "unsupported_grant_type" }, nostore);
 }
 
+/* --------------------------------------------------------------------- icons */
+const fromB64 = (b) => Uint8Array.from(atob(b), (c) => c.charCodeAt(0));
+let iconBin = null;
+const icons = () => (iconBin ||= { png: fromB64(ICON_PNG_B64), ico: fromB64(ICON_ICO_B64) });
+const ICON_HEADERS = { ...CORS, "Cache-Control": "public, max-age=86400" };
+const iconRes = (body, type) => new Response(body, { status: 200, headers: { ...ICON_HEADERS, "Content-Type": type } });
+
+function landingPage(base) {
+  return `<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(SERVER_INFO.title)}</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.ico" sizes="32x32 64x64"><link rel="apple-touch-icon" href="/icon.png">
+<body style="font-family:system-ui,sans-serif;max-width:520px;margin:12vh auto;padding:0 16px;text-align:center">
+<img src="/icon.png" width="96" height="96" alt="" style="border-radius:22px">
+<h1 style="font-size:1.4rem">${esc(SERVER_INFO.title)}</h1>
+<p>MCP endpoint:<br><code>${esc(base)}/mcp</code></p></body></html>`;
+}
+
 /* -------------------------------------------------------------------- router */
 /** Xử lý 1 Request chuẩn Web, trả Response. Gọi configure(env) trước. */
 export async function handle(request) {
@@ -805,6 +829,11 @@ export async function handle(request) {
     const method = request.method;
     if (method === "OPTIONS") return plain(204);
 
+    if (path === "/" && (request.headers.get("accept") || "").includes("text/html"))
+      return new Response(landingPage(baseUrl(request)), { status: 200, headers: { ...CORS, "Content-Type": "text/html; charset=utf-8" } });
+    if (method === "GET" && path === "/favicon.ico") return iconRes(icons().ico, "image/x-icon");
+    if (method === "GET" && path === "/favicon.svg") return iconRes(ICON_SVG, "image/svg+xml");
+    if (method === "GET" && (path === "/icon.png" || path === "/apple-touch-icon.png")) return iconRes(icons().png, "image/png");
     if (path === "/" || path === "/health") return jres(200, { ok: true, name: SERVER_INFO.name, mcp: `${baseUrl(request)}/mcp` });
     if (path === "/.well-known/oauth-authorization-server" || path === "/.well-known/openid-configuration") return jres(200, metadata(baseUrl(request)));
     if (path.startsWith("/.well-known/oauth-protected-resource")) {

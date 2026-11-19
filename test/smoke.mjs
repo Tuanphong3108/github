@@ -202,6 +202,17 @@ try {
   assert.equal(prm.resource, `${base}/mcp`);
   ok("OAuth metadata");
 
+  const ico = await fetch(`${base}/favicon.ico`);
+  assert.equal(ico.headers.get("content-type"), "image/x-icon");
+  assert.deepEqual([...new Uint8Array(await ico.arrayBuffer()).slice(0, 4)], [0, 0, 1, 0]);
+  const png = await fetch(`${base}/icon.png`);
+  assert.equal(png.headers.get("content-type"), "image/png");
+  assert.deepEqual([...new Uint8Array(await png.arrayBuffer()).slice(0, 4)], [0x89, 0x50, 0x4e, 0x47]);
+  assert.match(await (await fetch(`${base}/favicon.svg`)).text(), /<svg/);
+  assert.match(await (await fetch(`${base}/`, { headers: { Accept: "text/html" } })).text(), /rel="icon"/);
+  assert.equal((await (await fetch(`${base}/`)).json()).ok, true);
+  ok("Icon: /favicon.ico, /favicon.svg, /icon.png, trang chủ HTML");
+
   const noAuth = await fetch(`${base}/mcp`, { method: "POST", body: "{}" });
   assert.equal(noAuth.status, 401);
   assert.match(noAuth.headers.get("www-authenticate"), /resource_metadata=/);
@@ -259,6 +270,8 @@ try {
 
   const init = await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } });
   assert.equal(init.result.protocolVersion, "2025-06-18");
+  assert.equal(init.result.serverInfo.title, "Github Remote Repository");
+  assert.equal(init.result.serverInfo.icons[0].src, `${base}/icon.png`);
   const notif = await fetch(`${base}/mcp`, { method: "POST", headers: { Authorization: `Bearer ${tok.access_token}` }, body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) });
   assert.equal(notif.status, 202);
   const list = await rpc("tools/list");

@@ -169,20 +169,26 @@ const mock = http.createServer(async (req, res) => {
   return nf();
 });
 
-await new Promise((r) => mock.listen(0, "127.0.0.1", r));
+await new Promise((r) => mock.listen(Number(process.env.MOCK_PORT || 0), "127.0.0.1", r));
 const mockUrl = `http://127.0.0.1:${mock.address().port}`;
 
 /* ------------------------------------------------------------------- chạy server */
-const port = 38000 + Math.floor(Math.random() * 1000);
-const base = `http://127.0.0.1:${port}`;
-const child = spawn(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "server.js")], {
-  env: { ...process.env, PORT: String(port), PUBLIC_URL: base, GITHUB_API_URL: mockUrl, GITHUB_WEB_URL: mockUrl, GITHUB_CLIENT_ID: "gid", GITHUB_CLIENT_SECRET: "gsec", MCP_CLIENT_ID: "cid", MCP_CLIENT_SECRET: "csec", SESSION_SECRET: "s" },
-  stdio: ["ignore", "pipe", "inherit"],
-});
-await new Promise((resolve, reject) => {
-  child.stdout.on("data", (d) => /listening/.test(String(d)) && resolve());
-  child.on("exit", (c) => reject(new Error("server exited " + c)));
-});
+let base, child;
+if (process.env.SMOKE_BASE) {
+  // Server chạy sẵn bên ngoài (vd. `wrangler dev`), trỏ GITHUB_API_URL/GITHUB_WEB_URL về mock (MOCK_PORT)
+  base = process.env.SMOKE_BASE;
+} else {
+  const port = 38000 + Math.floor(Math.random() * 1000);
+  base = `http://127.0.0.1:${port}`;
+  child = spawn(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "server.js")], {
+    env: { ...process.env, PORT: String(port), PUBLIC_URL: base, GITHUB_API_URL: mockUrl, GITHUB_WEB_URL: mockUrl, GITHUB_CLIENT_ID: "gid", GITHUB_CLIENT_SECRET: "gsec", MCP_CLIENT_ID: "cid", MCP_CLIENT_SECRET: "csec", SESSION_SECRET: "s" },
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  await new Promise((resolve, reject) => {
+    child.stdout.on("data", (d) => /listening/.test(String(d)) && resolve());
+    child.on("exit", (c) => reject(new Error("server exited " + c)));
+  });
+}
 
 let passed = 0;
 const ok = (name) => console.log(`  ✓ ${name}`) || passed++;
@@ -326,6 +332,6 @@ try {
   console.error("\nFAIL:", e);
   process.exitCode = 1;
 } finally {
-  child.kill();
+  child?.kill();
   mock.close();
 }

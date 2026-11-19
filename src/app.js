@@ -40,7 +40,7 @@ export function configure(env) {
 }
 export const getConfig = () => cfg;
 
-const SERVER_INFO = { name: "github-remote-repository", title: "Github Remote Repository", version: "1.3.0" };
+const SERVER_INFO = { name: "github-remote-repository", title: "Github Remote Repository", version: "1.4.0" };
 const PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 
 /* ------------------------------------------------------------------ sealing */
@@ -544,8 +544,82 @@ const TOOLS = [
   ),
 
   tool(
+    "list_commits",
+    "List commits of a repository (newest first, or oldest-first from the beginning when from_start=true). Supports filtering by branch/SHA (`sha`), file/directory (`path`), author, and date range (`since` / `until` in ISO 8601 format).",
+    {
+      owner: OWNER,
+      repo: REPO,
+      sha: { type: "string", description: "Branch name, tag, or commit SHA to start listing from. Defaults to the default branch." },
+      path: { type: "string", description: "Only commits containing this file or directory path." },
+      author: { type: "string", description: "GitHub username or email address to filter by." },
+      since: { type: "string", description: "Only commits after this ISO 8601 date/time, e.g. 2026-07-01T00:00:00Z." },
+      until: { type: "string", description: "Only commits before this ISO 8601 date/time, e.g. 2026-11-19T23:59:59Z." },
+      from_start: { type: "boolean", description: "Walk history all the way to the initial commit and return chronological order (oldest first). Default false (newest first)." },
+      per_page: { type: "integer", description: "1-100, default 30 (ignored when from_start=true, which auto-paginates)." },
+      page: { type: "integer", description: "Page number, default 1 (ignored when from_start=true)." },
+      max_commits: { type: "integer", description: "Cap when from_start=true, default 500 (max 2000)." },
+    },
+    ["owner", "repo"],
+    async (a, t) => {
+      need(a, "owner", "repo");
+      const mapCommit = (c) => ({
+        sha: c.sha,
+        url: c.html_url,
+        message: c.commit?.message,
+        author: c.commit?.author,
+        committer: c.commit?.committer,
+        parents: (c.parents || []).map((p) => p.sha),
+      });
+      const baseQuery = {
+        sha: a.sha,
+        path: a.path ? cleanPath(a.path) : undefined,
+        author: a.author,
+        since: a.since,
+        until: a.until,
+      };
+      if (a.from_start) {
+        const cap = Math.min(Math.max(a.max_commits || 500, 1), 2000);
+        const all = [];
+        let page = 1;
+        let truncated = false;
+        while (all.length < cap) {
+          const batch = await gh(t, "GET", `${R(a)}/commits${qs({ ...baseQuery, per_page: 100, page })}`);
+          if (!Array.isArray(batch) || !batch.length) break;
+          all.push(...batch.map(mapCommit));
+          if (batch.length < 100) break;
+          if (all.length >= cap) {
+            truncated = true;
+            break;
+          }
+          page++;
+        }
+        const trimmed = all.slice(0, cap).reverse();
+        return {
+          order: "oldest_first",
+          total: trimmed.length,
+          truncated,
+          commits: trimmed,
+        };
+      }
+      const per_page = Math.min(Math.max(a.per_page || 30, 1), 100);
+      const page = Math.max(a.page || 1, 1);
+      const data = await gh(t, "GET", `${R(a)}/commits${qs({ ...baseQuery, per_page, page })}`);
+      const list = Array.isArray(data) ? data.map(mapCommit) : [];
+      return {
+        order: "newest_first",
+        page,
+        per_page,
+        count: list.length,
+        has_more: list.length === per_page,
+        commits: list,
+      };
+    },
+    { readOnlyHint: true },
+  ),
+
+  tool(
     "get_commit",
-    "Inspect a commit: message, author, parents, stats and changed files (optionally with patches). Use it to verify a commit/push.",
+    "Inspect a single commit: message, author, parents, stats and changed files (optionally with patches). Use it to verify a commit/push.",
     {
       owner: OWNER,
       repo: REPO,
@@ -620,7 +694,7 @@ async function handleRpc(msg, token, base) {
           ],
         },
         instructions:
-          "GitHub repository tools. Direct edits: create_file/update_file/delete_file commit straight to a branch. For multi-file changes use commit_changes then push_changes. Verify with get_commit.",
+          "GitHub repository tools. Direct edits: create_file/update_file/delete_file commit straight to a branch. For multi-file changes use commit_changes then push_changes. Browse history with list_commits (supports from_start, since/until, path, author) and inspect a single commit with get_commit.",
       });
     }
     case "ping":

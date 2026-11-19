@@ -1,4 +1,4 @@
-// Smoke test: dựng GitHub giả (in-memory) + chạy server.js thật, đi hết luồng OAuth và gọi cả 10 tool.
+// Smoke test: dựng GitHub giả (in-memory) + chạy server.js thật, đi hết luồng OAuth và gọi cả 12 tool.
 // Chạy: npm test
 import http from "node:http";
 import crypto from "node:crypto";
@@ -14,7 +14,7 @@ const unb64 = (s) => Buffer.from(s, "base64").toString("utf8");
 /* ---------------------------------------------------------- GitHub giả (mini git) */
 const blobs = new Map(); // id -> base64
 const trees = new Map(); // id -> Map(path -> blobId)
-const commits = new Map(); // id -> { tree, parents, message }
+const commits = new Map(); // id -> { tree, parents, message, date }
 const refs = new Map(); // branch -> commit id
 
 const mkBlob = (b) => {
@@ -27,9 +27,9 @@ const mkTree = (map) => {
   trees.set(id, map);
   return id;
 };
-const mkCommit = (tree, parents, message) => {
+const mkCommit = (tree, parents, message, date = new Date().toISOString()) => {
   const id = sha();
-  commits.set(id, { tree, parents, message });
+  commits.set(id, { tree, parents, message, date });
   return id;
 };
 const treeOf = (cid) => trees.get(commits.get(cid).tree);
@@ -43,7 +43,7 @@ const isAncestor = (a, b) => {
   return false;
 };
 
-refs.set("main", mkCommit(mkTree(new Map([["README.md", mkBlob(b64("# hello\n"))]])), [], "init"));
+refs.set("main", mkCommit(mkTree(new Map([["README.md", mkBlob(b64("# hello\n"))]])), [], "init", "2026-01-01T00:00:00Z"));
 
 async function readJson(req) {
   const chunks = [];
@@ -152,6 +152,27 @@ const mock = http.createServer(async (req, res) => {
   if ((x = rest.match(/^\/git\/trees\/([0-9a-f]+)$/))) {
     const t = trees.get(x[1]);
     return json(200, { truncated: false, tree: [...t].map(([k, id]) => ({ path: k, type: "blob", size: 1, sha: id })) });
+  }
+  if (rest === "/commits" && req.method === "GET") {
+    const startRef = url.searchParams.get("sha") || "main";
+    let cur = refs.get(startRef) || (commits.has(startRef) ? startRef : null);
+    if (!cur) return nf();
+    const since = url.searchParams.get("since");
+    const until = url.searchParams.get("until");
+    const chain = [];
+    const seen = new Set();
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      const c = commits.get(cur);
+      if (!c) break;
+      if ((!since || c.date >= since) && (!until || c.date <= until)) {
+        chain.push({ sha: cur, html_url: "x", commit: { message: c.message, author: { name: "t", date: c.date }, committer: { name: "t", date: c.date } }, parents: c.parents.map((s) => ({ sha: s })) });
+      }
+      cur = c.parents[0] || null;
+    }
+    const perPage = Number(url.searchParams.get("per_page") || 30);
+    const page = Number(url.searchParams.get("page") || 1);
+    return json(200, chain.slice((page - 1) * perPage, page * perPage));
   }
   if ((x = rest.match(/^\/commits\/(.+)$/))) {
     const ref = decodeURIComponent(x[1]);
@@ -275,8 +296,8 @@ try {
   const notif = await fetch(`${base}/mcp`, { method: "POST", headers: { Authorization: `Bearer ${tok.access_token}` }, body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) });
   assert.equal(notif.status, 202);
   const list = await rpc("tools/list");
-  assert.deepEqual(list.result.tools.map((t) => t.name).sort(), ["commit_changes", "create_branch", "create_file", "create_repo", "delete_file", "get_commit", "list_files", "list_repos", "push_changes", "read_file", "update_file"]);
-  ok("initialize + tools/list (11 tool)");
+  assert.deepEqual(list.result.tools.map((t) => t.name).sort(), ["commit_changes", "create_branch", "create_file", "create_repo", "delete_file", "get_commit", "list_commits", "list_files", "list_repos", "push_changes", "read_file", "update_file"]);
+  ok("initialize + tools/list (12 tool)");
 
   assert.equal(data(await call("list_repos", {}))[0].full_name, "u/r");
   ok("list_repos");
@@ -327,6 +348,20 @@ try {
   assert.deepEqual(gc.files.map((f) => `${f.status}:${f.filename}`).sort(), ["added:src/b.txt", "removed:README.md"]);
   assert.equal(gc.parents[0], before);
   ok("get_commit");
+
+  const lcNew = data(await call("list_commits", { ...R, sha: "feature/x" }));
+  assert.equal(lcNew.order, "newest_first");
+  assert.equal(lcNew.commits[0].sha, cc.commit_sha);
+  assert.equal(lcNew.commits.at(-1).message, "init");
+
+  const lcOld = data(await call("list_commits", { ...R, sha: "feature/x", from_start: true }));
+  assert.equal(lcOld.order, "oldest_first");
+  assert.equal(lcOld.commits[0].message, "init");
+  assert.equal(lcOld.commits.at(-1).sha, cc.commit_sha);
+
+  const lcRange = data(await call("list_commits", { ...R, sha: "feature/x", since: "2026-06-01T00:00:00Z" }));
+  assert.ok(lcRange.commits.every((c) => c.message !== "init"));
+  ok("list_commits (mới nhất, từ đầu from_start=true, và lọc since/until)");
 
   const np = data(await call("commit_changes", { ...R, branch: "new/y", from_branch: "main", message: "new branch", push: true, changes: [{ path: "n.txt", content: "N" }] }));
   assert.equal(np.pushed, true);

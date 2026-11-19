@@ -23,7 +23,8 @@ Chạy được 2 nơi, cùng một lõi `src/app.js`:
 | `create_branch` | Tạo branch từ branch khác hoặc từ commit SHA |
 | `commit_changes` | Tạo **1 commit** gồm nhiều thay đổi (upsert/delete nhiều file). Chưa di chuyển branch |
 | `push_changes` | Đẩy commit lên branch (tạo branch nếu chưa có). Fast-forward, hoặc `force=true` |
-| `get_commit` | Xem commit: message, parent, stats, file đổi, patch |
+| `list_commits` | Liệt kê danh sách commit (mới nhất trước, hoặc từ commit đầu tiên với `from_start=true`, lọc theo `since`/`until`, `path`, `author`) |
+| `get_commit` | Xem chi tiết 1 commit: message, parent, stats, file đổi, patch |
 
 GitHub API không có "local commit" thật, nên: `commit_changes` tạo commit object (chưa trỏ branch nào) và trả về `commit_sha`; `push_changes` mới trỏ branch vào commit đó. Muốn gộp 1 bước thì `commit_changes` với `push: true`. Muốn nối nhiều commit trước khi push thì truyền `parent_sha` = `commit_sha` của commit trước.
 
@@ -104,7 +105,7 @@ Bấm **Tiếp theo** → đăng nhập GitHub → Authorize.
 npm test
 ```
 
-Dựng GitHub giả in-memory, chạy server thật, đi hết luồng OAuth (PKCE) và gọi đủ 11 tool. Muốn thử bản Worker trên runtime thật: chạy `wrangler dev` với các `--var` trỏ `GITHUB_API_URL`/`GITHUB_WEB_URL` về `http://127.0.0.1:<MOCK_PORT>`, rồi `SMOKE_BASE=http://127.0.0.1:<port> MOCK_PORT=<MOCK_PORT> node test/smoke.mjs`.
+Dựng GitHub giả in-memory, chạy server thật, đi hết luồng OAuth (PKCE) và gọi đủ 12 tool. Muốn thử bản Worker trên runtime thật: chạy `wrangler dev` với các `--var` trỏ `GITHUB_API_URL`/`GITHUB_WEB_URL` về `http://127.0.0.1:<MOCK_PORT>`, rồi `SMOKE_BASE=http://127.0.0.1:<port> MOCK_PORT=<MOCK_PORT> node test/smoke.mjs`.
 
 ## Bảo mật
 

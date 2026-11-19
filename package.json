@@ -1,0 +1,17 @@
+{
+  "name": "github-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server (Streamable HTTP + OAuth) để Gemini Custom Connector quản lý repo GitHub: list, read, create/update/delete, branch, commit, push.",
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --env-file=.env server.js",
+    "gen-creds": "node -e \"const c=require('crypto');console.log('MCP_CLIENT_ID=gh-mcp-'+c.randomBytes(6).toString('hex'));console.log('MCP_CLIENT_SECRET='+c.randomBytes(32).toString('hex'));console.log('SESSION_SECRET='+c.randomBytes(32).toString('hex'))\"",
+    "test": "node test/smoke.mjs"
+  },
+  "license": "MIT"
+}

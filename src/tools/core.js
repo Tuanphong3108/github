@@ -1,6 +1,12 @@
 /** Nhóm "core": repo, file, branch, commit, push, lịch sử commit. */
 import { cfg } from "../config.js";
-import { tool, gh, ep, qs, R, cleanPath, toB64, need, defaultBranch, branchHead, pushRef, OWNER, REPO, BRANCH, ENCODING } from "../github.js";
+import { tool, gh, ep, qs, R, cleanPath, toB64, need, defaultBranch, branchHead, pushRef, obj, OWNER, REPO, BRANCH, ENCODING } from "../github.js";
+
+const countOcc = (text, sub) => {
+  let n = 0;
+  for (let i = text.indexOf(sub); i !== -1; i = text.indexOf(sub, i + sub.length)) n++;
+  return n;
+};
 
 export const CORE_TOOLS = [
   tool(
@@ -215,6 +221,99 @@ export const CORE_TOOLS = [
         ...(a.branch ? { branch: a.branch } : {}),
       });
       return { path: r.content?.path, file_sha: r.content?.sha, commit_sha: r.commit?.sha, commit_url: r.commit?.html_url, html_url: r.content?.html_url };
+    },
+  ),
+
+  tool(
+    "edit_file",
+    "Edit part of an existing TEXT file by exact string replacement and commit it to a branch (one commit) — no need to resend the whole file. Copy `old_string` exactly from read_file (whitespace and indentation included). Each old_string must match exactly ONCE unless replace_all=true. Pass several edits in `edits` to apply them in order in a single commit (later edits see the result of earlier ones). The commit is made against the exact file version that was read, so if someone changed the file in the meantime the call fails instead of overwriting their work.",
+    {
+      owner: OWNER,
+      repo: REPO,
+      path: { type: "string", description: "Path of the existing text file." },
+      edits: {
+        type: "array",
+        description: "Replacements applied in order. Alternative to the single old_string/new_string shorthand.",
+        items: {
+          type: "object",
+          properties: {
+            old_string: { type: "string", description: "Exact text to find (must be unique unless replace_all)." },
+            new_string: { type: "string", description: 'Replacement text. Use "" to delete the matched text.' },
+            replace_all: { type: "boolean", description: "Replace every occurrence instead of requiring a unique match." },
+          },
+          required: ["old_string", "new_string"],
+        },
+      },
+      old_string: { type: "string", description: "Shorthand for a single edit: exact text to find." },
+      new_string: { type: "string", description: "Shorthand for a single edit: replacement text." },
+      replace_all: { type: "boolean", description: "Shorthand for a single edit: replace every occurrence." },
+      message: { type: "string", description: "Commit message. Default: 'Edit <path>'." },
+      branch: BRANCH,
+      sha: { type: "string", description: "Optional blob sha from read_file; the edit is refused if the file no longer has this sha." },
+      dry_run: { type: "boolean", description: "Check that all edits apply and report the result WITHOUT committing." },
+    },
+    ["owner", "repo", "path"],
+    async (a, t) => {
+      need(a, "owner", "repo", "path");
+      let edits = obj(a.edits, "edits");
+      if (edits === undefined) {
+        if (a.old_string === undefined) throw new Error("Pass `edits` (list) or old_string + new_string.");
+        edits = [{ old_string: a.old_string, new_string: a.new_string, replace_all: a.replace_all }];
+      }
+      if (!Array.isArray(edits) || !edits.length) throw new Error("`edits` must be a non-empty list.");
+
+      const cur = await gh(t, "GET", `${R(a)}/contents/${ep(a.path)}${qs({ ref: a.branch })}`);
+      if (Array.isArray(cur)) throw new Error(`"${a.path}" is a directory.`);
+      if (cur.type !== "file") throw new Error(`"${a.path}" is not a regular file (${cur.type}).`);
+      if (a.sha && a.sha !== cur.sha) throw new Error(`File changed since you read it (current sha ${cur.sha}, expected ${a.sha}). Re-read it with read_file and redo the edit.`);
+      const buf = cur.encoding === "base64" && cur.content ? Buffer.from(cur.content, "base64") : Buffer.from((await gh(t, "GET", `${R(a)}/git/blobs/${cur.sha}`)).content, "base64");
+      if (buf.subarray(0, 8000).includes(0)) throw new Error(`"${a.path}" looks like a binary file; edit_file only works on text files.`);
+
+      const original = buf.toString("utf8");
+      const crlf = original.includes("\r\n");
+      let text = original;
+      const report = [];
+      edits.forEach((e, i) => {
+        const n = i + 1;
+        if (!e || typeof e.old_string !== "string" || e.old_string === "") throw new Error(`Edit #${n}: old_string must be a non-empty string.`);
+        if (typeof e.new_string !== "string") throw new Error(`Edit #${n}: new_string is required (use "" to delete the text).`);
+        let from = e.old_string;
+        let to = e.new_string;
+        let count = countOcc(text, from);
+        if (count === 0 && crlf && !from.includes("\r\n")) {
+          // file dùng CRLF nhưng old_string gửi bằng LF
+          const f2 = from.replace(/\n/g, "\r\n");
+          const c2 = countOcc(text, f2);
+          if (c2 > 0) {
+            from = f2;
+            to = to.replace(/\r?\n/g, "\r\n");
+            count = c2;
+          }
+        }
+        if (count === 0) throw new Error(`Edit #${n}: old_string not found in ${a.path}. It must match exactly, including whitespace and indentation — re-read the file with read_file and copy it again.`);
+        if (count > 1 && !e.replace_all) throw new Error(`Edit #${n}: old_string matches ${count} places in ${a.path}. Add more surrounding text to make it unique, or set replace_all=true.`);
+        if (from === to) throw new Error(`Edit #${n}: old_string and new_string are identical.`);
+        text = e.replace_all ? text.split(from).join(to) : text.replace(from, () => to);
+        report.push({ edit: n, replacements: e.replace_all ? count : 1 });
+      });
+      if (text === original) throw new Error("The edits produce no change.");
+
+      const summary = { path: cleanPath(a.path), edits: report, lines_before: original.split("\n").length, lines_after: text.split("\n").length, bytes_before: buf.length, bytes_after: Buffer.byteLength(text, "utf8") };
+      if (a.dry_run) return { dry_run: true, would_commit: true, ...summary };
+
+      let r;
+      try {
+        r = await gh(t, "PUT", `${R(a)}/contents/${ep(a.path)}`, {
+          message: a.message || `Edit ${cleanPath(a.path)}`,
+          content: Buffer.from(text, "utf8").toString("base64"),
+          sha: cur.sha,
+          ...(a.branch ? { branch: a.branch } : {}),
+        });
+      } catch (e) {
+        if (e.status === 409) throw new Error(`The file was changed on the branch while editing (${e.message}). Nothing was written — re-read it and redo the edit.`);
+        throw e;
+      }
+      return { ...summary, commit_sha: r.commit?.sha, commit_url: r.commit?.html_url, file_sha: r.content?.sha, html_url: r.content?.html_url };
     },
   ),
 

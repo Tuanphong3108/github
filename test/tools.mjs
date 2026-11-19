@@ -81,7 +81,7 @@ const P = "/repos/o/r";
 
 try {
   /* ============================================================ registry */
-  assert.equal(getTools(["core"]).length, 13);
+  assert.equal(getTools(["core"]).length, 14);
   assert.equal(new Set(getTools(["all"]).map((t) => t.name)).size, getTools(["all"]).length);
   configure({ ...ENV, TOOL_GROUPS: "core,admin" });
   const sub = (await rpc("tools/list")).tools.map((t) => t.name);

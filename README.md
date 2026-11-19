@@ -9,11 +9,11 @@ Chạy được 2 nơi, cùng một lõi `src/app.js`:
 | `worker.js` | **Cloudflare Workers** (free, không bị ngủ, deploy hoàn toàn bằng Dashboard) |
 | `server.js` | Node >= 20: Render, Railway, Fly, Docker, máy local + tunnel |
 
-## Tools (73)
+## Tools (74)
 
 Chia 4 nhóm, bật/tắt bằng biến `TOOL_GROUPS` (xem bên dưới). Mặc định bật tất cả.
 
-### `core` — repo, file, branch, commit (13)
+### `core` — repo, file, branch, commit (14)
 
 | Tool | Chức năng |
 |---|---|
@@ -23,7 +23,8 @@ Chia 4 nhóm, bật/tắt bằng biến `TOOL_GROUPS` (xem bên dưới). Mặc 
 | `list_files` | Duyệt cây thư mục (1 cấp hoặc `recursive`) |
 | `read_file` | Đọc nội dung file (hỗ trợ `start_line`/`end_line`, file > 1MB, binary base64) |
 | `create_file` | Tạo file, commit thẳng lên branch (chạy được cả repo rỗng) |
-| `update_file` | Sửa file (tự lấy `sha` nếu không truyền) |
+| `update_file` | **Ghi đè toàn bộ** nội dung file (tự lấy `sha` nếu không truyền) |
+| `edit_file` | Sửa **một đoạn** của file text bằng cách thay chuỗi cũ → chuỗi mới (nhiều edit tuần tự trong 1 commit, `replace_all`, `dry_run`). Chỉ commit trên đúng phiên bản file đã đọc nên không đè lên thay đổi của người khác |
 | `delete_file` | Xoá file (tự lấy `sha` nếu không truyền) |
 | `create_branch` | Tạo branch từ branch khác hoặc từ commit SHA |
 | `commit_changes` | Tạo **1 commit** gồm nhiều thay đổi (upsert/delete nhiều file). Chưa di chuyển branch |

@@ -328,6 +328,71 @@ try {
   assert.equal((await call("read_file", { ...R, path: "docs/a.md" })).content[1].text, "A2");
   ok("update_file (tự lấy sha)");
 
+  /* --- edit_file --- */
+  const fileText = async (path) => (await call("read_file", { ...R, path })).content[1].text;
+  await call("create_file", { ...R, path: "e.txt", content: "alpha\nbeta\nbeta2\ngamma\n" });
+  let ef = await call("edit_file", { ...R, path: "e.txt", old_string: "alpha", new_string: "ALPHA" });
+  assert.ok(!ef.isError, text(ef));
+  assert.equal(await fileText("e.txt"), "ALPHA\nbeta\nbeta2\ngamma\n");
+  const efd = data(ef);
+  assert.equal(efd.edits[0].replacements, 1);
+  assert.equal(efd.commit_sha, refs.get("main"), "edit_file phải tạo đúng 1 commit trên main");
+  ok("edit_file: thay 1 đoạn, giữ nguyên phần còn lại, 1 commit");
+
+  const headBefore = refs.get("main");
+  ef = await call("edit_file", { ...R, path: "e.txt", old_string: "beta", new_string: "B" });
+  assert.equal(ef.isError, true);
+  assert.match(text(ef), /matches 2 places/);
+  ef = await call("edit_file", { ...R, path: "e.txt", old_string: "does not exist", new_string: "x" });
+  assert.match(text(ef), /not found/);
+  ef = await call("edit_file", { ...R, path: "e.txt", old_string: "gamma", new_string: "gamma" });
+  assert.match(text(ef), /identical/);
+  ef = await call("edit_file", { ...R, path: "e.txt", old_string: "ALPHA" });
+  assert.match(text(ef), /new_string is required/);
+  assert.equal(refs.get("main"), headBefore, "edit lỗi không được tạo commit");
+  assert.equal(await fileText("e.txt"), "ALPHA\nbeta\nbeta2\ngamma\n");
+  ok("edit_file: lỗi khi trùng nhiều chỗ / không tìm thấy / không đổi gì / thiếu new_string, không commit");
+
+  ef = await call("edit_file", { ...R, path: "e.txt", old_string: "beta", new_string: "B", replace_all: true });
+  assert.ok(!ef.isError, text(ef));
+  assert.equal(data(ef).edits[0].replacements, 2);
+  assert.equal(await fileText("e.txt"), "ALPHA\nB\nB2\ngamma\n");
+  ok("edit_file: replace_all");
+
+  const c1 = refs.get("main");
+  ef = await call("edit_file", { ...R, path: "e.txt", edits: [{ old_string: "ALPHA", new_string: "A" }, { old_string: "A\nB\n", new_string: "AB\n" }, { old_string: "gamma", new_string: "cost $& and $1 $$" }] });
+  assert.ok(!ef.isError, text(ef));
+  assert.equal(await fileText("e.txt"), "AB\nB2\ncost $& and $1 $$\n");
+  assert.notEqual(refs.get("main"), c1);
+  assert.equal(commits.get(refs.get("main")).parents[0], c1, "nhiều edit gộp trong đúng 1 commit");
+  ok("edit_file: nhiều edit tuần tự trong 1 commit, ký tự $ được giữ nguyên");
+
+  ef = await call("edit_file", { ...R, path: "e.txt", edits: [{ old_string: "AB", new_string: "X" }, { old_string: "nope", new_string: "y" }] });
+  assert.match(text(ef), /Edit #2/);
+  assert.equal(await fileText("e.txt"), "AB\nB2\ncost $& and $1 $$\n", "1 edit lỗi thì không edit nào được ghi");
+  const c2 = refs.get("main");
+  ef = await call("edit_file", { ...R, path: "e.txt", old_string: "AB", new_string: "ZZ", dry_run: true });
+  assert.equal(data(ef).dry_run, true);
+  assert.equal(refs.get("main"), c2, "dry_run không commit");
+  ok("edit_file: edit lỗi thì không ghi gì (atomic), dry_run không commit");
+
+  ef = await call("edit_file", { ...R, path: "e.txt", old_string: "AB", new_string: "ZZ", sha: "deadbeef" });
+  assert.match(text(ef), /File changed since you read it/);
+  const cur = data(await call("read_file", { ...R, path: "e.txt" }).then((r) => ({ content: [r.content[0]] })));
+  ef = await call("edit_file", { ...R, path: "e.txt", old_string: "AB", new_string: "ZZ", sha: cur.sha });
+  assert.ok(!ef.isError, text(ef));
+  ok("edit_file: tham số sha chặn ghi đè khi file đã đổi");
+
+  await call("create_file", { ...R, path: "win.txt", content: "x\r\ny\r\nz\r\n" });
+  ef = await call("edit_file", { ...R, path: "win.txt", old_string: "x\ny", new_string: "p\nq" });
+  assert.ok(!ef.isError, text(ef));
+  assert.equal(await fileText("win.txt"), "p\r\nq\r\nz\r\n");
+  await call("create_file", { ...R, path: "bin.dat", content: Buffer.from([1, 0, 2, 0, 3]).toString("base64"), encoding: "base64" });
+  assert.match(text(await call("edit_file", { ...R, path: "bin.dat", old_string: "a", new_string: "b" })), /binary/);
+  assert.match(text(await call("edit_file", { ...R, path: "docs", old_string: "a", new_string: "b" })), /directory/);
+  for (const f of ["e.txt", "win.txt", "bin.dat"]) assert.ok(!(await call("delete_file", { ...R, path: f })).isError);
+  ok("edit_file: file CRLF, từ chối file nhị phân và thư mục");
+
   const rec = data(await call("list_files", { ...R, recursive: true }));
   assert.deepEqual(rec.entries.map((e) => e.path).sort(), ["README.md", "docs/a.md"]);
   ok("list_files recursive");

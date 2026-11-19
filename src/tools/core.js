@@ -62,6 +62,24 @@ export const CORE_TOOLS = [
   ),
 
   tool(
+    "fork_repo",
+    "Fork a repository into the authenticated user's account (or into an organization). Forking is asynchronous: the fork may take a few seconds before its files are readable. Afterwards open a pull request with create_pull_request using head=\"<your-login>:<branch>\".",
+    {
+      owner: OWNER,
+      repo: REPO,
+      organization: { type: "string", description: "Fork into this organization instead of your own account." },
+      name: { type: "string", description: "Name for the fork (default: same as the original)." },
+      default_branch_only: { type: "boolean", description: "Copy only the default branch. Default false." },
+    },
+    ["owner", "repo"],
+    async (a, t) => {
+      need(a, "owner", "repo");
+      const r = await gh(t, "POST", `${R(a)}/forks`, { ...(a.organization ? { organization: a.organization } : {}), ...(a.name ? { name: a.name } : {}), ...(a.default_branch_only !== undefined ? { default_branch_only: !!a.default_branch_only } : {}) });
+      return { full_name: r.full_name, parent: r.parent?.full_name, default_branch: r.default_branch, html_url: r.html_url, note: "Fork is created asynchronously; retry reads after a few seconds if it looks empty." };
+    },
+  ),
+
+  tool(
     "list_files",
     "Browse the file tree of a repository. Lists one directory, or the whole tree below `path` when recursive=true.",
     {

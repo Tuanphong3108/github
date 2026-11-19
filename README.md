@@ -9,15 +9,16 @@ Chạy được 2 nơi, cùng một lõi `src/app.js`:
 | `worker.js` | **Cloudflare Workers** (free, không bị ngủ, deploy hoàn toàn bằng Dashboard) |
 | `server.js` | Node >= 20: Render, Railway, Fly, Docker, máy local + tunnel |
 
-## Tools (72)
+## Tools (73)
 
 Chia 4 nhóm, bật/tắt bằng biến `TOOL_GROUPS` (xem bên dưới). Mặc định bật tất cả.
 
-### `core` — repo, file, branch, commit (12)
+### `core` — repo, file, branch, commit (13)
 
 | Tool | Chức năng |
 |---|---|
 | `list_repos` | Liệt kê repository (của bạn, cộng tác, hoặc của 1 org) |
+| `fork_repo` | Fork repo của người khác về tài khoản của bạn (hoặc org) để tạo PR từ fork |
 | `create_repo` | Tạo repository mới (của bạn hoặc trong org). Mặc định **private** và có README |
 | `list_files` | Duyệt cây thư mục (1 cấp hoặc `recursive`) |
 | `read_file` | Đọc nội dung file (hỗ trợ `start_line`/`end_line`, file > 1MB, binary base64) |

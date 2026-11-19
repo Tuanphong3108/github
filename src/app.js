@@ -12,7 +12,7 @@ import { getTools } from "./tools/index.js";
 
 export { configure, getConfig };
 
-const SERVER_INFO = { name: "github-remote-repository", title: "Github Remote Repository", version: "1.5.0" };
+const SERVER_INFO = { name: "github-remote-repository", title: "Github Remote Repository", version: "1.6.0" };
 const PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 
 /* ------------------------------------------------------------------ sealing */

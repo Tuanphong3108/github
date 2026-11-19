@@ -81,7 +81,7 @@ const P = "/repos/o/r";
 
 try {
   /* ============================================================ registry */
-  assert.equal(getTools(["core"]).length, 12);
+  assert.equal(getTools(["core"]).length, 13);
   assert.equal(new Set(getTools(["all"]).map((t) => t.name)).size, getTools(["all"]).length);
   configure({ ...ENV, TOOL_GROUPS: "core,admin" });
   const sub = (await rpc("tools/list")).tools.map((t) => t.name);
@@ -89,6 +89,11 @@ try {
   assert.equal((await rpc("tools/call", { name: "create_issue", arguments: { ...O, title: "x" } })).isError, true, "tool ngoài nhóm phải bị từ chối");
   configure(ENV);
   ok(`Đăng ký tool: ${getTools(["all"]).length} tool, TOOL_GROUPS lọc được nhóm`);
+
+  const fk = data(await run("fork_repo", { ...O, organization: "org", default_branch_only: true }, [{ method: "POST", path: `${P}/forks`, exactBody: { organization: "org", default_branch_only: true }, status: 202, reply: { full_name: "org/r", parent: { full_name: "o/r" }, default_branch: "main", html_url: "u" } }]));
+  assert.equal(fk.parent, "o/r");
+  await run("fork_repo", O, [{ method: "POST", path: `${P}/forks`, exactBody: {}, status: 202, reply: { full_name: "me/r" } }]);
+  ok("fork_repo");
 
   /* ============================================================== issues */
   let r = data(await run("list_issues", { ...O, labels: "bug,help", state: "open" }, [
